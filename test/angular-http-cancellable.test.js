@@ -5,10 +5,12 @@ describe('$httpCancellable', function () {
 
   var $httpCancellable;
   var $httpBackend;
+  var $timeout;
 
-  beforeEach(inject(function (_$httpCancellable_, _$httpBackend_) {
+  beforeEach(inject(function (_$httpCancellable_, _$httpBackend_, _$timeout_) {
     $httpCancellable = _$httpCancellable_;
     $httpBackend = _$httpBackend_;
+    $timeout = _$timeout_;
   }));
 
   describe('making a succesful request', function () {
@@ -21,7 +23,7 @@ describe('$httpCancellable', function () {
 
     });
 
-    it('should respond 200', function () {
+    it('should respond 200', function (done) {
 
       var $scope = {};
 
@@ -37,25 +39,22 @@ describe('$httpCancellable', function () {
         .catch(function (error) {
           $scope.valid = false;
           $scope.error = error;
+        }).finally(function(){
+          $scope.finally = true;
+          done();
         });
 
       /* End */
       $httpBackend.flush();
-//      expect($httpBackend.flush).not.toThrow();
 
-      $scope.valid.should.equal(true);
-      $scope.response.data.should.equal({
-        message: 'Hello World'
-      });
-
-      //      expect($scope.valid).toBe(true);
-      //      expect($scope.response.data).toEqual({
-      //        message: 'Hello World'
-      //      });
+      $scope.should.have.property('valid').eql(true);
+      $scope.response.data.message.should.equal('Hello World');
+      $scope.should.have.property('finally').eql(true);
+      
     });
 
 
-    it('should cancel', function () {
+    it('should cancel', function (done) {
 
       var $scope = {};
 
@@ -71,18 +70,25 @@ describe('$httpCancellable', function () {
         .catch(function (error) {
           $scope.valid = true;
           $scope.error = error;
+        }).finally(function(){
+          $scope.finally = true;
+          done();
         });
 
       request.cancel();
-
+      
       /* End */
-
-//      expect($httpBackend.flush).toThrow();
-
-      $scope.valid.should.equal(true);
-      $scope.response.should.equal(undefined);
-      $scope.error.should.exist();
-
+      
+      try {
+        $httpBackend.flush();
+      } catch (err){
+        //This should happen
+        $scope.should.have.property('valid').eql(true);
+        $scope.should.not.have.property('response');
+        $scope.should.have.property('error');
+        $scope.should.have.property('finally').eql(true);
+      }
+      
     });
 
   });
