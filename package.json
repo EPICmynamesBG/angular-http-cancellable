@@ -1,6 +1,6 @@
 {
   "name": "angular-http-cancellable",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A library to overlay Angular v1s $http service and allow requests to be cancellable",
   "main": "dist/angular-http-cancellable.js",
   "scripts": {
