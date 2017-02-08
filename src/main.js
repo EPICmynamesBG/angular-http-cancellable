@@ -1,6 +1,6 @@
 var cancellableModule = angular.module('http.cancellable', []);
 
 
-cancellableModule.config(function($qProvider){
+cancellableModule.config(['$qProvider', function($qProvider){
   $qProvider.errorOnUnhandledRejections(false);
-});
+}]);

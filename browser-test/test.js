@@ -1,6 +1,6 @@
 var app = angular.module('test', ['http.cancellable']);
 
-app.run(function ($httpCancellable) {
+app.run(['$httpCancellable', function ($httpCancellable) {
   console.log('run');
   
   var request = $httpCancellable({
@@ -16,4 +16,4 @@ app.run(function ($httpCancellable) {
   
   request.cancel();
   
-});
+}]);

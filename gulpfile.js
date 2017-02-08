@@ -40,7 +40,7 @@ gulp.task("js-min", function () {
     .pipe(concat('angular-http-cancellable.min.js'))
     .on('error', handleError)
     .pipe(uglify({
-        mangle: true
+        mangle: false
       })
     .on('error', handleError))
     .pipe(gulp.dest('./dist'));
