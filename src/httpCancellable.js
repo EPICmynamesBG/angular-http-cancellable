@@ -6,7 +6,15 @@
  * @param {service} $http   Angular $http service
  * @param {service} $q      Angular $q service
  */
-function CancellablePromise(options, $http, $q) {
+function CancellablePromise(options, $http) {
+
+  var self = this;
+
+  var clearFuncCache = function () {
+    self.functionCache.onFulfill = angular.noop;
+    self.functionCache.onReject = angular.noop;
+    self.functionCache.finally = angular.noop;
+  };
 
   if (!options) {
     throw new Error('Missing required parameter: options');
@@ -18,9 +26,54 @@ function CancellablePromise(options, $http, $q) {
 
   this.options = options;
 
-  this.canceller = $q.defer();
+  this.completionFlag = false;
 
-  options.timeout = this.canceller.promise;
+  this.canceller = {};
+
+  this.canceller.promise = new Promise(function (resolve, reject) {
+    self.canceller.resolve = resolve;
+    self.canceller.reject = reject;
+  });
+
+  this.canceller.promise.then(function (response) {
+    self.completionFlag = true;
+    if (response.status === -1) {
+      self.functionCache.onReject(new Error(cancelMessage));
+    }
+    self.functionCache.onFulfill(response);
+    self.functionCache.finally();
+    clearFuncCache();
+  }).catch(function (error) {
+    self.completionFlag = true;
+    if (error && error.message === 'http.cancellable:Flush') {
+      return;
+    }
+    if (error && error.status === -1) {
+      self.functionCache.onReject(new Error(cancelMessage));
+    } else {
+      self.functionCache.onReject(error);
+    }
+    self.functionCache.finally();
+    clearFuncCache();
+  });
+  
+  this.canceller.flush = function() {
+    if (self.canceller.promise){
+      self.canceller.reject(new Error('http.cancellable:Flush'));
+      self.canceller.promise = null;
+      self.canceller.resolve = angular.noop;
+      self.cancel.flush = angular.noop;
+      self.$httpPromise = null;
+    }
+  }
+
+  this.functionCache = {
+    onFulfill: angular.noop,
+    onReject: function (err) {
+      console.warn('Error response is not being handled!');
+    },
+    finally: angular.noop
+  };
 
   this.$httpPromise = $http(options);
 };
@@ -31,10 +84,7 @@ function CancellablePromise(options, $http, $q) {
  * @returns {CancellablePromise} this CancellablePromise
  */
 CancellablePromise.prototype.cancel = function () {
-  var cancelMessage = this.options.cancelMessage;
-
-  this.canceller.resolve(new Error(cancelMessage));
-
+  this.canceller.resolve(new Error(this.options.cancelMessage));
   return this;
 };
 
@@ -47,21 +97,28 @@ CancellablePromise.prototype.cancel = function () {
  * @returns {CancellablePromise} this CancellablePRomise
  */
 CancellablePromise.prototype.then = function (onFulfilled, onReject, progressBack) {
+  var self = this;
 
-  var cancelMessage = this.options.cancelMessage;
+  this.functionCache.onFulfill = onFulfilled;
+  if (onReject) {
+    this.functionCache.onReject = onReject;
+  }
 
-  this.$httpPromise.then(function (response) {
-    if (response.status === -1) {
-      onReject(new Error(cancelMessage));
-    }
-    onFulfilled(response);
-  }, function (error) {
-    if (error.status === -1) {
-      onReject(new Error(cancelMessage));
-    } else {
-      onReject(error);
-    }
-  }, progressBack);
+  this.$httpPromise.then(function (res) {
+      if (!self.completionFlag) {
+        self.functionCache.onFulfill(res);
+        self.completionFlag = true;
+        self.canceller.flush();
+      }
+    },
+    function (err) {
+      if (!self.completionFlag) {
+        self.functionCache.onReject(err);
+        self.completionFlag = true;
+        self.canceller.flush();
+      }
+    },
+    progressBack);
 
   return this;
 };
@@ -73,17 +130,20 @@ CancellablePromise.prototype.then = function (onFulfilled, onReject, progressBac
  * @returns {CancellablePromise} this CancellablePRomise
  */
 CancellablePromise.prototype.catch = function (callback) {
+  var self = this;
   
-  var cancelMessage = this.options.cancelMessage;
-  
-  this.$httpPromise.catch(function (error) {
-    if (error.status === -1) {
-      callback(new Error(cancelMessage));
-    } else {
-      callback(error);
+  if (callback) {
+    self.functionCache.onReject = callback;
+  }
+
+  this.$httpPromise.catch(function (err) {
+    if (!self.completionFlag) {
+      self.functionCache.onReject(err);
+      self.completionFlag = true;
+      self.canceller.flush();
     }
-    
   });
+
   return this;
 };
 
@@ -95,13 +155,18 @@ CancellablePromise.prototype.catch = function (callback) {
  * @returns {CancellablePromise} this CancellablePRomise
  */
 CancellablePromise.prototype.finally = function (callback, progressBack) {
-  this.$httpPromise.finally(callback, progressBack);
+  this.functionCache.finally = callback;
+  var self = this;
+
+  this.$httpPromise
+    .finally(self.functionCache.finally, progressBack)
+    .then(angular.noop, angular.noop); // Fix unhandled rejection error: https://stackoverflow.com/a/41638905
   return this;
 };
 
 
-cancellableModule.factory('$httpCancellable', ['$http', '$q', function ($http, $q) {
+cancellableModule.factory('$httpCancellable', ['$http', function ($http) {
   return function (options) {
-    return new CancellablePromise(options, $http, $q);
+    return new CancellablePromise(options, $http);
   };
 }]);
