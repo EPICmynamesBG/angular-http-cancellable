@@ -4,6 +4,10 @@ A simple libary for making Angular $http requests cancellable
 
 Note: This library only applies for Angular v1. Testing only done on angular > 1.6.0. 
 
+## Recent Updates
+
+- Removed Angular $q service to reduce potential conflicts with other libs/use cases
+
 ## Setup - Install via npm
 
 `npm install --save angular-http-cancellable`
